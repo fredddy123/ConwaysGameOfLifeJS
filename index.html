@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Game of life</title>
+    <style>
+        * {
+            margin: 0px;
+            padding: 0px;
+        }
+
+        table {
+            border-collapse: collapse;
+        }
+
+        td {
+            width: 10px;
+            height: 10px;
+            border: 1px solid gray;
+        }
+
+        #wrapper {
+            display: flex;
+            flex-direction: row;
+        }
+    </style>
+</head>
+<body>
+    <div id="wrapper">
+        <div id="app"></div>
+        <div id="controls">
+            <button id='starter'>start</button>
+        </div>
+    </div>
+    <script>
+        // ===
+        // ui init
+        // ===
+        const table = document.createElement('table');
+        const tbody = document.createElement('tbody');
+        table.appendChild(tbody);
+
+        const app = document.getElementById('app');
+        const starter = document.getElementById('starter');
+
+        app.appendChild(table);
+
+        for (let i = 0; i < 60; i++) {
+            const tr = document.createElement('tr');
+
+            for (let j = 0; j < 70; j++) {
+                const td = document.createElement('td');
+                td.dataset.location = `${j},${i}`;
+
+                tr.appendChild(td);
+            }
+
+            tbody.appendChild(tr);
+        }
+
+        // ===
+        // logic
+        // ===
+
+        class AbstractDrawingBoard {
+            prepare() {
+                throw 'prepare not implemented';
+            }
+
+            add() {
+                throw 'add not implemented';
+            }
+
+            draw() {
+                throw 'draw not implemented';
+            }
+        }
+
+        class AbstractTimer {
+            constructor(interval, func) {
+                this.interval = interval;
+                this.func = func;
+            }
+
+            init(interval, func) {
+                if (interval) {
+                    this.interval = interval;
+                }
+
+                if (func) {
+                    this.func = func;
+                }
+            }
+
+            start() {
+                throw 'start not implemented';
+            }
+
+            stop() {
+                throw 'stop not implemented';
+            }
+
+            changeInterval(newInterval) {
+                this.stop();
+                this.interval = newInterval;
+                this.start();
+            }
+        }
+
+        class TimerStandard extends AbstractTimer {
+            start() {
+                this.timer = setInterval(this.func, this.interval);
+            }
+
+            stop() {
+                clearInterval(this.timer);
+            }
+        }
+
+        class Cell {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+
+            static getHash(x, y) {
+                return `${x},${y}`;
+            }
+
+            getHash() {
+                return `${this.x},${this.y}`;
+            }
+        }
+
+        class DrawingBoardAdapterTable extends AbstractDrawingBoard {
+            constructor(board) {
+                super();
+                this.board = board;
+
+                this.cells = [];
+            }
+
+            get width() {
+                return this.board.rows[0].cells.length;
+            }
+
+            get height() {
+                return this.board.rows.length;
+            }
+
+            prepare() {
+                this.cells.forEach(cell => {
+                    this.board.rows[cell.y % this.height].cells[cell.x % this.width].style.backgroundColor = 'rgb(255, 255, 255)';
+                });
+
+                this.cells = [];
+            }
+
+            add(cell) {
+                this.cells.push(cell);
+            }
+
+            draw() {
+                this.cells.forEach(cell => {
+                    this.board.rows[cell.y % this.height].cells[cell.x % this.width].style.backgroundColor = 'rgb(0, 0, 0)';
+                });
+            }
+        }
+
+        class Game {
+            constructor(drawingBoard, timer) {
+                this.drawingBoard = drawingBoard;
+                this.timer = timer;
+                this.aliveCells = {};
+            }
+
+            start() {
+                this.timer.init(100, this.update.bind(this));
+                this.timer.start();
+            }
+
+            update() {
+                this.calculateNextGeneration();
+                this.draw();
+            }
+
+            addAliveCell(cell) {
+                this.aliveCells[cell.getHash()] = cell;
+            }
+
+            draw() {
+                this.drawingBoard.prepare();
+
+                for (const hash in this.aliveCells) {
+                    this.drawingBoard.add(this.aliveCells[hash]);
+                }
+
+                this.drawingBoard.draw();
+            }
+
+            calculateNextGeneration() {
+                const filteredHashOfAliveCells = this._tryToKillCells();
+                const hashOfNewAliveCells = this._tryToGrowCells();
+
+                this.aliveCells = Object.assign({}, filteredHashOfAliveCells, hashOfNewAliveCells);
+            }
+
+            _tryToKillCells() {
+                const aliveCellsCopy = JSON.parse(JSON.stringify(this.aliveCells));
+
+                const propsToDelete = [];
+
+                for (const hash in aliveCellsCopy) {
+                    const shouldLive = this._shouldStayAlive(aliveCellsCopy[hash]);
+
+                    if (!shouldLive) {
+                        propsToDelete.push(hash);
+                    }
+                }
+
+                propsToDelete.forEach(prop => {
+                    delete aliveCellsCopy[prop];
+                });
+
+                return aliveCellsCopy;
+            }
+
+            _tryToGrowCells() {
+                const newAliveCells = {};
+
+                for (const hash in this.aliveCells) {
+                    const neighbours = this._getNeigbours(this.aliveCells[hash]);
+
+                    neighbours.forEach(cell => {
+                        const shouldEngender = this._shouldEngender(cell);
+
+                        if (shouldEngender) {
+                            newAliveCells[cell.getHash()] = new Cell(
+                                cell.x,
+                                cell.y
+                            );
+                        }
+                    });
+                }
+
+                return newAliveCells;
+            }
+
+            _getNeigbours(cell) {
+                const neighbours = [];
+
+                for (let i = cell.y - 1; i < cell.y + 2; i++) {
+                    for (let j = cell.x - 1; j < cell.x + 2; j++) {
+                        if (i === cell.y && j === cell.x) {
+                            continue;
+                        }
+
+                        neighbours.push(new Cell(j, i));
+                    }
+                }
+
+                return neighbours;
+            }
+
+            _getNumberOfAliveNeighbours(x, y) {
+                const neighbours = this._getNeigbours(new Cell(x, y));
+                let numberOfAliveNeighbours = 0;
+
+                neighbours.forEach(cell => {
+                    numberOfAliveNeighbours += +!!this.aliveCells[cell.getHash()];
+                });
+
+                return numberOfAliveNeighbours;
+            }
+
+            _shouldStayAlive(cell) {
+                return [2, 3].includes(this._getNumberOfAliveNeighbours(cell.x, cell.y));
+            }
+
+            _shouldEngender(cell) {
+                return this._getNumberOfAliveNeighbours(cell.x, cell.y) === 3;
+            }
+        }
+
+        const drawingBoard = new DrawingBoardAdapterTable(table);
+        const timer = new TimerStandard();
+
+        const game = new Game(drawingBoard, timer);
+
+        // ===
+        // events
+        // ===
+
+        table.onclick = event => {
+            if (event.target.tagName !== 'TD') {
+                return;
+            }
+
+            // Game events
+            const location = event.target.dataset.location.split(',');
+            game.addAliveCell(new Cell(+location[0], +location[1]));
+            game.draw(drawingBoard);
+        }
+
+        starter.onclick = event => {
+            game.start();
+        }
+    </script>
+</body>
+</html>
