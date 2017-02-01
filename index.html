@@ -152,7 +152,7 @@
 
             prepare() {
                 this.cells.forEach(cell => {
-                    this.board.rows[cell.y % this.height].cells[cell.x % this.width].style.backgroundColor = 'rgb(255, 255, 255)';
+                    this.board.rows[cell.y].cells[cell.x].style.backgroundColor = 'rgb(255, 255, 255)';
                 });
 
                 this.cells = [];
@@ -164,7 +164,7 @@
 
             draw() {
                 this.cells.forEach(cell => {
-                    this.board.rows[cell.y % this.height].cells[cell.x % this.width].style.backgroundColor = 'rgb(0, 0, 0)';
+                    this.board.rows[cell.y].cells[cell.x].style.backgroundColor = 'rgb(0, 0, 0)';
                 });
             }
         }
@@ -257,7 +257,10 @@
                             continue;
                         }
 
-                        neighbours.push(new Cell(j, i));
+                        const x = j < 0 ? this.drawingBoard.width + j : j % this.drawingBoard.width;
+                        const y = i < 0 ? this.drawingBoard.height + i : i % this.drawingBoard.height;
+
+                        neighbours.push(new Cell(x, y));
                     }
                 }
 
